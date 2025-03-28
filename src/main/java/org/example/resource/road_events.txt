@@ -1,0 +1,13 @@
+# xBegin, yBegin, xEnd, yEnd, eventType
+# Clear is default and doesn't need to be specified
+# Accidents
+10.00,5.00,20.00,15.00,Accident
+-25.00,-20.00,-15.00,-10.00,Accident
+35.00,30.00,45.00,40.00,Accident
+# Construction areas
+-5.00,25.00,15.00,35.00,Construction
+30.00,-10.00,40.00,0.00,Construction
+-30.00,10.00,-20.00,20.00,Construction
+# Roadblocks (complete closures)
+5.00,-30.00,15.00,-20.00,Roadblock
+-40.00,-40.00,-30.00,-30.00,Roadblock

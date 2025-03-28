@@ -1,0 +1,11 @@
+# ID, Speed, MaxFuelTank, MinFuelTank, Capacity, BaseConsumption, PayloadCoefficient, RefuelingTime, RefuelingCost
+# Small delivery vehicle
+1,60.00,80.00,10.00,100.00,0.15,0.002,1.00,15.00
+# Medium delivery vehicle
+2,55.00,120.00,15.00,150.00,0.18,0.0015,1.50,20.00
+# Large delivery vehicle
+3,45.00,150.00,20.00,200.00,0.22,0.001,2.00,25.00
+# Extra vehicle (backup)
+4,65.00,90.00,12.00,120.00,0.16,0.0018,1.20,18.00
+# Fast delivery vehicle
+5,70.00,70.00,8.00,80.00,0.17,0.0025,0.80,12.00

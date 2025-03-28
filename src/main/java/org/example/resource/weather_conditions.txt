@@ -1,0 +1,15 @@
+# xBegin, yBegin, xEnd, yEnd, weatherType
+# Clear weather is default and doesn't need to be specified
+# Light rain areas
+15.00,20.00,35.00,40.00,Light Rain
+-30.00,-10.00,-10.00,15.00,Light Rain
+# Heavy rain areas
+-40.00,30.00,-20.00,45.00,Heavy Rain
+25.00,-45.00,45.00,-25.00,Heavy Rain
+# Fog areas
+-15.00,-40.00,5.00,-20.00,Fog
+30.00,30.00,50.00,50.00,Fog
+# Snow area (small region)
+-25.00,35.00,-15.00,45.00,Snow
+# Storm area (high risk)
+-45.00,-45.00,-25.00,-25.00,Storm

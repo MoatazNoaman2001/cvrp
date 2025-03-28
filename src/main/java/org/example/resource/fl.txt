@@ -1,0 +1,1591 @@
+// FLUTTER PROJECT STRUCTURE
+//
+// This implementation contains the following files:
+// 1. pubspec.yaml - Project dependencies
+// 2. lib/main.dart - Main application entry point
+// 3. lib/mediasoup_client.dart - MediaSoup client implementation
+// 4. lib/system_audio_capture.dart - System audio capture utility
+// 5. lib/webrtc_utils.dart - WebRTC utility functions
+// 6. lib/ui/audio_control_panel.dart - UI for controlling audio sharing
+// 7. android/app/src/main/kotlin/com/example/audio_share/SystemAudioCapture.kt - Native Android implementation
+// 8. ios/Runner/SystemAudioCapture.swift - Native iOS implementation
+//
+// Let's start with the pubspec.yaml file:
+
+// ==================== pubspec.yaml ====================
+name: system_audio_share
+description: A Flutter application for sharing system audio using MediaSoup and WebRTC
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_webrtc: ^0.9.36
+  mediasoup_client_flutter: ^0.8.5
+  socket_io_client: ^2.0.2
+  permission_handler: ^10.2.0
+  provider: ^6.0.5
+  uuid: ^3.0.7
+  http: ^0.13.5
+  flutter_background_service: ^2.4.6
+  cupertino_icons: ^1.0.5
+  logger: ^1.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.1
+
+flutter:
+  uses-material-design: true
+
+// ==================== lib/main.dart ====================
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:system_audio_share/mediasoup_client.dart';
+import 'package:system_audio_share/system_audio_capture.dart';
+import 'package:system_audio_share/ui/audio_control_panel.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger(
+  printer: PrettyPrinter(),
+);
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => MediaSoupClient()),
+        ChangeNotifierProvider(create: (_) => SystemAudioCaptureService()),
+      ],
+      child: MaterialApp(
+        title: 'System Audio Share',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        home: const AudioShareHome(),
+      ),
+    );
+  }
+}
+
+class AudioShareHome extends StatefulWidget {
+  const AudioShareHome({Key? key}) : super(key: key);
+
+  @override
+  AudioShareHomeState createState() => AudioShareHomeState();
+}
+
+class AudioShareHomeState extends State<AudioShareHome> {
+  final TextEditingController _roomController = TextEditingController();
+  final TextEditingController _serverController = TextEditingController();
+  bool _isConnecting = false;
+  String _statusMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _serverController.text = 'wss://yourmediasoupserver.com';
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    await [
+      Permission.microphone,
+      Permission.bluetooth,
+      Permission.bluetoothConnect,
+    ].request();
+  }
+
+  @override
+  void dispose() {
+    _roomController.dispose();
+    _serverController.dispose();
+    super.dispose();
+  }
+
+  void _connectToRoom() async {
+    if (_roomController.text.isEmpty || _serverController.text.isEmpty) {
+      setState(() {
+        _statusMessage = 'Room ID and server URL are required';
+      });
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+      _statusMessage = 'Connecting to room...';
+    });
+
+    try {
+      final mediaSoupClient = Provider.of<MediaSoupClient>(context, listen: false);
+      await mediaSoupClient.connect(
+        serverUrl: _serverController.text,
+        roomId: _roomController.text,
+      );
+
+      setState(() {
+        _statusMessage = 'Connected to room: ${_roomController.text}';
+      });
+    } catch (e) {
+      logger.e('Connection error: $e');
+      setState(() {
+        _statusMessage = 'Connection failed: $e';
+      });
+    } finally {
+      setState(() {
+        _isConnecting = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('System Audio Share'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _serverController,
+              decoration: const InputDecoration(
+                labelText: 'MediaSoup Server URL',
+                hintText: 'wss://yourmediasoupserver.com',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _roomController,
+              decoration: const InputDecoration(
+                labelText: 'Room ID',
+                hintText: 'Enter room ID',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _isConnecting ? null : _connectToRoom,
+              child: _isConnecting
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  : const Text('Connect to Room'),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _statusMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _statusMessage.contains('failed')
+                    ? Colors.red
+                    : Colors.green,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            Consumer<MediaSoupClient>(
+              builder: (context, mediaSoupClient, _) {
+                if (!mediaSoupClient.isConnected) {
+                  return const Center(
+                    child: Text('Connect to a room to start sharing audio'),
+                  );
+                }
+                return const AudioControlPanel();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== lib/mediasoup_client.dart ====================
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:mediasoup_client_flutter/mediasoup_client_flutter.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:uuid/uuid.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
+
+class MediaSoupClient extends ChangeNotifier {
+  // Socket connection
+  io.Socket? _socket;
+  Device? _device;
+
+  // Transports
+  SendTransport? _sendTransport;
+  RecvTransport? _recvTransport;
+
+  // Producers and consumers
+  final Map<String, Producer> _producers = {};
+  final Map<String, Consumer> _consumers = {};
+
+  // State variables
+  bool _isConnected = false;
+  String _roomId = '';
+  String _peerId = '';
+  String _displayName = 'Flutter App';
+
+  // Getters
+  bool get isConnected => _isConnected;
+  String get roomId => _roomId;
+
+  // Connect to MediaSoup server
+  Future<void> connect({
+    required String serverUrl,
+    required String roomId,
+    String? displayName,
+  }) async {
+    if (_isConnected) {
+      await disconnect();
+    }
+
+    _roomId = roomId;
+    _peerId = const Uuid().v4();
+    if (displayName != null) {
+      _displayName = displayName;
+    }
+
+    try {
+      // Connect to signaling server
+      _socket = io.io(
+        serverUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .disableAutoConnect()
+            .enableForceNew()
+            .build(),
+      );
+
+      _setupSocketListeners();
+      _socket!.connect();
+
+      // Wait for connection
+      await _waitForSocketConnection();
+
+      // Join room
+      final routerRtpCapabilities = await _joinRoom();
+
+      // Create and load device
+      _device = Device();
+      await _device!.load(RouterLoadOptions(routerRtpCapabilities: routerRtpCapabilities));
+
+      // Create transports
+      await _createSendTransport();
+      await _createRecvTransport();
+
+      _isConnected = true;
+      notifyListeners();
+
+      logger.i('Successfully connected to MediaSoup room: $_roomId');
+    } catch (error) {
+      logger.e('Error connecting to MediaSoup: $error');
+      await disconnect();
+      throw Exception('Failed to connect to MediaSoup: $error');
+    }
+  }
+
+  // Disconnect from MediaSoup server
+  Future<void> disconnect() async {
+    // Close all producers
+    for (final producer in _producers.values) {
+      await producer.close();
+    }
+    _producers.clear();
+
+    // Close all consumers
+    for (final consumer in _consumers.values) {
+      await consumer.close();
+    }
+    _consumers.clear();
+
+    // Close transports
+    await _sendTransport?.close();
+    _sendTransport = null;
+
+    await _recvTransport?.close();
+    _recvTransport = null;
+
+    // Reset device
+    _device = null;
+
+    // Leave room and disconnect socket
+    if (_socket != null && _socket!.connected) {
+      _socket!.emit('leaveRoom', {'roomId': _roomId, 'peerId': _peerId});
+      _socket!.disconnect();
+      _socket = null;
+    }
+
+    _isConnected = false;
+    _roomId = '';
+
+    notifyListeners();
+    logger.i('Disconnected from MediaSoup');
+  }
+
+  // Produce system audio
+  Future<Producer> produceSystemAudio(MediaStream stream) async {
+    if (!_isConnected) {
+      throw Exception('Not connected to MediaSoup server');
+    }
+
+    if (_sendTransport == null) {
+      throw Exception('Send transport not created');
+    }
+
+    final audioTrack = stream.getAudioTracks().first;
+
+    final producer = await _sendTransport!.produce(
+      ProducerOptions(
+        track: audioTrack,
+        codecOptions: ProducerCodecOptions(
+          opusStereo: true,
+          opusDtx: true,
+          opusFec: true,
+          opusPtime: 20,
+        ),
+        appData: {
+          'source': 'system',
+          'paused': false,
+        },
+      ),
+    );
+
+    _producers[producer.id] = producer;
+
+    // Set up producer listeners
+    producer.on('transportclose', () {
+      logger.i('Producer transport closed: ${producer.id}');
+      _producers.remove(producer.id);
+      notifyListeners();
+    });
+
+    producer.on('trackended', () {
+      logger.i('Producer track ended: ${producer.id}');
+      closeProducer(producer.id);
+    });
+
+    notifyListeners();
+    logger.i('System audio producer created with id: ${producer.id}');
+
+    return producer;
+  }
+
+  // Close a specific producer
+  Future<void> closeProducer(String producerId) async {
+    final producer = _producers[producerId];
+    if (producer == null) return;
+
+    try {
+      await producer.close();
+      _producers.remove(producerId);
+
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('closeProducer', {
+          'producerId': producerId,
+        });
+      }
+
+      notifyListeners();
+      logger.i('Producer closed: $producerId');
+    } catch (error) {
+      logger.e('Error closing producer: $error');
+      throw Exception('Failed to close producer: $error');
+    }
+  }
+
+  // Pause producer
+  Future<void> pauseProducer(String producerId) async {
+    final producer = _producers[producerId];
+    if (producer == null) return;
+
+    try {
+      await producer.pause();
+
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('pauseProducer', {
+          'producerId': producerId,
+        });
+      }
+
+      notifyListeners();
+      logger.i('Producer paused: $producerId');
+    } catch (error) {
+      logger.e('Error pausing producer: $error');
+      throw Exception('Failed to pause producer: $error');
+    }
+  }
+
+  // Resume producer
+  Future<void> resumeProducer(String producerId) async {
+    final producer = _producers[producerId];
+    if (producer == null) return;
+
+    try {
+      await producer.resume();
+
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('resumeProducer', {
+          'producerId': producerId,
+        });
+      }
+
+      notifyListeners();
+      logger.i('Producer resumed: $producerId');
+    } catch (error) {
+      logger.e('Error resuming producer: $error');
+      throw Exception('Failed to resume producer: $error');
+    }
+  }
+
+  // Setup socket listeners
+  void _setupSocketListeners() {
+    _socket!.onConnect((_) {
+      logger.i('Socket connected');
+    });
+
+    _socket!.onDisconnect((_) {
+      logger.i('Socket disconnected');
+      _isConnected = false;
+      notifyListeners();
+    });
+
+    _socket!.onError((error) {
+      logger.e('Socket error: $error');
+    });
+
+    _socket!.on('newConsumer', (data) async {
+      try {
+        await _handleNewConsumer(data);
+      } catch (error) {
+        logger.e('Error handling new consumer: $error');
+      }
+    });
+
+    _socket!.on('consumerClosed', (data) {
+      final consumerId = data['consumerId'];
+      _closeConsumer(consumerId);
+    });
+
+    _socket!.on('peerLeft', (data) {
+      final peerId = data['peerId'];
+      _handlePeerLeft(peerId);
+    });
+  }
+
+  // Wait for socket connection
+  Future<void> _waitForSocketConnection() {
+    final completer = Completer<void>();
+
+    if (_socket!.connected) {
+      completer.complete();
+    } else {
+      _socket!.onConnect((_) {
+        completer.complete();
+      });
+
+      _socket!.onError((error) {
+        completer.completeError('Socket connection failed: $error');
+      });
+
+      // Add timeout
+      Future.delayed(const Duration(seconds: 10), () {
+        if (!completer.isCompleted) {
+          completer.completeError('Socket connection timeout');
+        }
+      });
+    }
+
+    return completer.future;
+  }
+
+  // Join MediaSoup room
+  Future<dynamic> _joinRoom() {
+    final completer = Completer<dynamic>();
+
+    _socket!.emit('joinRoom', {
+      'roomId': _roomId,
+      'peerId': _peerId,
+      'displayName': _displayName,
+    }, (response) {
+      if (response['error'] != null) {
+        completer.completeError(response['error']);
+        return;
+      }
+
+      completer.complete(response['rtpCapabilities']);
+    });
+
+    return completer.future;
+  }
+
+  // Create send transport
+  Future<void> _createSendTransport() async {
+    final completer = Completer<void>();
+
+    _socket!.emit('createWebRtcTransport', {
+      'forceTcp': false,
+      'producing': true,
+      'consuming': false,
+    }, (response) async {
+      if (response['error'] != null) {
+        completer.completeError(response['error']);
+        return;
+      }
+
+      try {
+        _sendTransport = await _device!.createSendTransport(
+          SendTransportOptions(
+            id: response['id'],
+            iceParameters: response['iceParameters'],
+            iceCandidates: response['iceCandidates'],
+            dtlsParameters: response['dtlsParameters'],
+            sctpParameters: response['sctpParameters'],
+          ),
+        );
+
+        _sendTransport!.on('connect', (Map data) {
+          final dtlsParameters = data['dtlsParameters'];
+          _socket!.emit('connectWebRtcTransport', {
+            'transportId': _sendTransport!.id,
+            'dtlsParameters': dtlsParameters,
+          }, (response) {
+            if (response['error'] != null) {
+              data['callback'](null);
+              return;
+            }
+
+            data['callback']();
+          });
+        });
+
+        _sendTransport!.on('produce', (Map data) {
+          final kind = data['kind'];
+          final rtpParameters = data['rtpParameters'];
+          final appData = data['appData'];
+
+          _socket!.emit('produce', {
+            'transportId': _sendTransport!.id,
+            'kind': kind,
+            'rtpParameters': rtpParameters,
+            'appData': appData,
+          }, (response) {
+            if (response['error'] != null) {
+              data['callback'](null);
+              return;
+            }
+
+            data['callback'](response['id']);
+          });
+        });
+
+        completer.complete();
+      } catch (error) {
+        completer.completeError('Failed to create send transport: $error');
+      }
+    });
+
+    return completer.future;
+  }
+
+  // Create receive transport
+  Future<void> _createRecvTransport() async {
+    final completer = Completer<void>();
+
+    _socket!.emit('createWebRtcTransport', {
+      'forceTcp': false,
+      'producing': false,
+      'consuming': true,
+    }, (response) async {
+      if (response['error'] != null) {
+        completer.completeError(response['error']);
+        return;
+      }
+
+      try {
+        _recvTransport = await _device!.createRecvTransport(
+          RecvTransportOptions(
+            id: response['id'],
+            iceParameters: response['iceParameters'],
+            iceCandidates: response['iceCandidates'],
+            dtlsParameters: response['dtlsParameters'],
+            sctpParameters: response['sctpParameters'],
+          ),
+        );
+
+        _recvTransport!.on('connect', (Map data) {
+          final dtlsParameters = data['dtlsParameters'];
+          _socket!.emit('connectWebRtcTransport', {
+            'transportId': _recvTransport!.id,
+            'dtlsParameters': dtlsParameters,
+          }, (response) {
+            if (response['error'] != null) {
+              data['callback'](null);
+              return;
+            }
+
+            data['callback']();
+          });
+        });
+
+        completer.complete();
+      } catch (error) {
+        completer.completeError('Failed to create receive transport: $error');
+      }
+    });
+
+    return completer.future;
+  }
+
+  // Handle new consumer
+  Future<void> _handleNewConsumer(Map data) async {
+    if (_recvTransport == null) {
+      logger.e('Cannot consume without a recvTransport');
+      return;
+    }
+
+    final String id = data['id'];
+    final String producerId = data['producerId'];
+    final String kind = data['kind'];
+    final dynamic rtpParameters = data['rtpParameters'];
+
+    // Consume the track
+    final consumer = await _recvTransport!.consume(
+      ConsumerOptions(
+        id: id,
+        producerId: producerId,
+        kind: kind,
+        rtpParameters: rtpParameters,
+      ),
+    );
+
+    _consumers[id] = consumer;
+
+    // Send consumer ready
+    _socket!.emit('resumeConsumer', {'consumerId': id});
+
+    notifyListeners();
+    logger.i('New consumer created: $id');
+  }
+
+  // Close consumer
+  void _closeConsumer(String consumerId) {
+    final consumer = _consumers[consumerId];
+    if (consumer != null) {
+      consumer.close();
+      _consumers.remove(consumerId);
+      notifyListeners();
+      logger.i('Consumer closed: $consumerId');
+    }
+  }
+
+  // Handle peer leaving
+  void _handlePeerLeft(String peerId) {
+    // Remove consumers from this peer
+    final consumersToClose = _consumers.entries
+        .where((entry) => entry.value.appData['peerId'] == peerId)
+        .map((entry) => entry.key)
+        .toList();
+
+    for (final consumerId in consumersToClose) {
+      _closeConsumer(consumerId);
+    }
+  }
+}
+
+// ==================== lib/system_audio_capture.dart ====================
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
+
+class SystemAudioCaptureService extends ChangeNotifier {
+  static const platform = MethodChannel('com.example.audio_share/audio_capture');
+
+  MediaStream? _systemAudioStream;
+  bool _isCapturing = false;
+  String? _errorMessage;
+
+  // Getters
+  MediaStream? get systemAudioStream => _systemAudioStream;
+  bool get isCapturing => _isCapturing;
+  String? get errorMessage => _errorMessage;
+
+  // Start capturing system audio
+  Future<MediaStream?> startCapture() async {
+    if (_isCapturing) {
+      return _systemAudioStream;
+    }
+
+    try {
+      _errorMessage = null;
+
+      if (Platform.isAndroid) {
+        await _startAndroidCapture();
+      } else if (Platform.isIOS) {
+        await _startIOSCapture();
+      } else {
+        throw Exception('System audio capture is only supported on Android and iOS');
+      }
+
+      _isCapturing = true;
+      notifyListeners();
+
+      return _systemAudioStream;
+    } catch (e) {
+      logger.e('Error starting system audio capture: $e');
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // Stop capturing system audio
+  Future<void> stopCapture() async {
+    if (!_isCapturing) {
+      return;
+    }
+
+    try {
+      if (_systemAudioStream != null) {
+        for (final track in _systemAudioStream!.getTracks()) {
+          await track.stop();
+        }
+
+        await _systemAudioStream!.dispose();
+        _systemAudioStream = null;
+      }
+
+      if (Platform.isAndroid) {
+        await platform.invokeMethod('stopSystemAudioCapture');
+      } else if (Platform.isIOS) {
+        await platform.invokeMethod('stopSystemAudioCapture');
+      }
+
+      _isCapturing = false;
+      notifyListeners();
+      logger.i('System audio capture stopped');
+    } catch (e) {
+      logger.e('Error stopping system audio capture: $e');
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Start Android capture
+  Future<void> _startAndroidCapture() async {
+    final audioConstraints = <String, dynamic>{
+      'audio': true,
+      'androidAudioSource': 'AUDIO_SOURCE_REMOTE_SUBMIX',
+    };
+
+    // Create a new stream with audio enabled
+    _systemAudioStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+
+    // Start the native capture service
+    await platform.invokeMethod('startSystemAudioCapture');
+
+    logger.i('Android system audio capture started');
+  }
+
+  // Start iOS capture
+  Future<void> _startIOSCapture() async {
+    // Start the native capture service first
+    await platform.invokeMethod('startSystemAudioCapture');
+
+    // Configure constraints for screen capture with audio
+    final audioConstraints = <String, dynamic>{
+      'audio': true,
+      'iosAudioCategory': 'playAndRecord',
+      'iosAudioCategoryOptions': ['allowBluetooth', 'allowBluetoothA2DP', 'mixWithOthers'],
+    };
+
+    // Create a new stream with audio enabled
+    _systemAudioStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+
+    logger.i('iOS system audio capture started');
+  }
+}
+
+// ==================== lib/webrtc_utils.dart ====================
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+
+class WebRTCUtils {
+  // Apply audio constraints for system audio
+  static Map<String, dynamic> getSystemAudioConstraints() {
+    return {
+      'audio': {
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+      },
+      'video': false,
+    };
+  }
+
+  // Get audio levels from MediaStreamTrack
+  static Future<double> getAudioLevel(MediaStreamTrack track) async {
+    // This is a simplified implementation
+    // In a real application, you might want to use the WebRTC stats API
+    // to get the audio levels more accurately
+
+    if (!track.enabled || track.muted) {
+      return 0.0;
+    }
+
+    // Default value - in a real implementation you would
+    // calculate this from the audio samples
+    return 0.5;
+  }
+
+  // Convert a MediaStream to a low latency stream
+  static Future<MediaStream> optimizeForLowLatency(MediaStream stream) async {
+    final optimizedStream = await navigator.mediaDevices.getUserMedia({
+      'audio': {
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+        'latency': 0.01, // Request minimal latency
+      },
+      'video': false,
+    });
+
+    // Replace audio track with existing track
+    final originalTrack = stream.getAudioTracks().first;
+    final optimizedTrack = optimizedStream.getAudioTracks().first;
+
+    stream.removeTrack(originalTrack);
+    stream.addTrack(optimizedTrack);
+
+    return stream;
+  }
+}
+
+// ==================== lib/ui/audio_control_panel.dart ====================
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:system_audio_share/mediasoup_client.dart';
+import 'package:system_audio_share/system_audio_capture.dart';
+import 'package:mediasoup_client_flutter/mediasoup_client_flutter.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
+
+class AudioControlPanel extends StatefulWidget {
+  const AudioControlPanel({Key? key}) : super(key: key);
+
+  @override
+  AudioControlPanelState createState() => AudioControlPanelState();
+}
+
+class AudioControlPanelState extends State<AudioControlPanel> {
+  Producer? _audioProducer;
+  bool _isStartingCapture = false;
+  bool _isStoppingCapture = false;
+  double _volumeLevel = 70;
+  bool _isMuted = false;
+
+  @override
+  void dispose() {
+    _stopSharing();
+    super.dispose();
+  }
+
+  // Start sharing system audio
+  Future<void> _startSharing() async {
+    if (_audioProducer != null || _isStartingCapture) {
+      return;
+    }
+
+    setState(() {
+      _isStartingCapture = true;
+    });
+
+    try {
+      final audioCapture = Provider.of<SystemAudioCaptureService>(context, listen: false);
+      final mediaSoupClient = Provider.of<MediaSoupClient>(context, listen: false);
+
+      // Start capturing system audio
+      final stream = await audioCapture.startCapture();
+      if (stream == null) {
+        throw Exception('Failed to capture system audio');
+      }
+
+      // Create producer with the audio stream
+      _audioProducer = await mediaSoupClient.produceSystemAudio(stream);
+
+      setState(() {
+        _isStartingCapture = false;
+      });
+
+      logger.i('Started sharing system audio');
+    } catch (e) {
+      logger.e('Error starting system audio sharing: $e');
+      setState(() {
+        _isStartingCapture = false;
+      });
+
+      // Show error dialog
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to start audio sharing: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  // Stop sharing system audio
+  Future<void> _stopSharing() async {
+    if (_audioProducer == null || _isStoppingCapture) {
+      return;
+    }
+
+    setState(() {
+      _isStoppingCapture = true;
+    });
+
+    try {
+      final audioCapture = Provider.of<SystemAudioCaptureService>(context, listen: false);
+      final mediaSoupClient = Provider.of<MediaSoupClient>(context, listen: false);
+
+      // Close the producer
+      await mediaSoupClient.closeProducer(_audioProducer!.id);
+      _audioProducer = null;
+
+      // Stop system audio capture
+      await audioCapture.stopCapture();
+
+      setState(() {
+        _isStoppingCapture = false;
+        _isMuted = false;
+      });
+
+      logger.i('Stopped sharing system audio');
+    } catch (e) {
+      logger.e('Error stopping system audio sharing: $e');
+      setState(() {
+        _isStoppingCapture = false;
+      });
+    }
+  }
+
+  // Toggle mute
+  Future<void> _toggleMute() async {
+    if (_audioProducer == null) {
+      return;
+    }
+
+    try {
+      final mediaSoupClient = Provider.of<MediaSoupClient>(context, listen: false);
+
+      if (_isMuted) {
+        await mediaSoupClient.resumeProducer(_audioProducer!.id);
+        setState(() {
+          _isMuted = false;
+        });
+        logger.i('Audio unmuted');
+      } else {
+        await mediaSoupClient.pauseProducer(_audioProducer!.id);
+        setState(() {
+          _isMuted = true;
+        });
+        logger.i('Audio muted');
+      }
+    } catch (e) {
+      logger.e('Error toggling mute: $e');
+    }
+  }
+
+  // Change volume level
+  Future<void> _changeVolume(double newValue) async {
+    setState(() {
+      _volumeLevel = newValue;
+    });
+
+    // This is a simplified implementation
+    // In a real application, you would adjust the actual audio volume
+    // through the platform's audio APIs
+    logger.i('Volume changed to: $_volumeLevel%');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'System Audio Sharing',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Consumer<SystemAudioCaptureService>(
+              builder: (context, audioCapture, _) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (audioCapture.isCapturing)
+                      ElevatedButton.icon(
+                        onPressed: _isStoppingCapture ? null : _stopSharing,
+                        icon: _isStoppingCapture
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.stop),
+                        label: const Text('Stop Sharing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: _isStartingCapture ? null : _startSharing,
+                        icon: _isStartingCapture
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.play_arrow),
+                        label: const Text('Start Sharing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                        ),
+                      ),
+                    const SizedBox(width: 16),
+                    if (audioCapture.isCapturing)
+                      IconButton(
+                        onPressed: _toggleMute,
+                        icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+                        tooltip: _isMuted ? 'Unmute' : 'Mute',
+                        color: _isMuted ? Colors.red : Colors.blue,
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            Consumer<SystemAudioCaptureService>(
+              builder: (context, audioCapture, _) {
+                if (!audioCapture.isCapturing) {
+                  return Container();
+                }
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.volume_down),
+                        Expanded(
+                          child: Slider(
+                            value: _volumeLevel,
+                            min: 0,
+                            max: 100,
+                            divisions: 20,
+                            label: '${_volumeLevel.round()}%',
+                            onChanged: _isMuted ? null : _changeVolume,
+                          ),
+                        ),
+                        const Icon(Icons.volume_up),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Audio status: Streaming',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                );
+              },
+            ),
+            if (Provider.of<SystemAudioCaptureService>(context).errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16.0),
+                child: Text(
+                  'Error: ${Provider.of<SystemAudioCaptureService>(context).errorMessage}',
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== android/app/src/main/kotlin/com/example/audio_share/SystemAudioCapture.kt ====================
+package com.example.audio_share
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.media.AudioFormat
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioRecord
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.os.IBinder
+import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodChannel
+import io.flutter.view.FlutterCallbackInformation
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicBoolean
+
+@RequiresApi(Build.VERSION_CODES.Q)
+class SystemAudioCaptureService : Service() {
+    private val TAG = "SystemAudioCapture"
+    private val NOTIFICATION_ID = 1337
+    private val CHANNEL_ID = "system_audio_capture_channel"
+
+    private var mediaProjection: MediaProjection? = null
+    private var audioRecord: AudioRecord? = null
+    private val isCapturing = AtomicBoolean(false)
+    private var captureThread: Thread? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "START") {
+            val notificationIntent = Intent(this, MainActivity::class.java)
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Audio Share")
+                .setContentText("Capturing system audio")
+                .setSmallIcon(R.drawable.notification_icon)
+                .setOngoing(true)
+                .build()
+
+            startForeground(NOTIFICATION_ID, notification)
+
+            val resultCode = intent.getIntExtra("resultCode", 0)
+            val data = intent.getParcelableExtra<Intent>("data")
+
+            startCapture(resultCode, data)
+        } else if (intent?.action == "STOP") {
+            stopCapture()
+            stopForeground(true)
+            stopSelf()
+        }
+
+        return START_NOT_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "System Audio Capture"
+            val descriptionText = "Used for capturing system audio"
+            val importance = NotificationManager.IMPORTANCE_LOW
+
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+            }
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun startCapture(resultCode: Int, data: Intent?) {
+        if (isCapturing.get()) {
+            Log.d(TAG, "Already capturing system audio")
+            return
+        }
+
+        if (data == null) {
+            Log.e(TAG, "No media projection data")
+            return
+        }
+
+        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
+
+        if (mediaProjection == null) {
+            Log.e(TAG, "Failed to get media projection")
+            return
+        }
+
+        try {
+            val config = AudioPlaybackCaptureConfiguration.Builder(mediaProjection!!)
+                .addMatchingUsage(AudioFormat.USAGE_MEDIA)
+                .addMatchingUsage(AudioFormat.USAGE_GAME)
+                .addMatchingUsage(AudioFormat.USAGE_UNKNOWN)
+                .build()
+
+            val bufferSize = AudioRecord.getMinBufferSize(
+                44100,
+                AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ) * 2
+
+            audioRecord = AudioRecord.Builder()
+                .setAudioPlaybackCaptureConfig(config)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(44100)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .build()
+                )
+                .setBufferSizeInBytes(bufferSize)
+                .build()
+
+            audioRecord?.startRecording()
+            isCapturing.set(true)
+
+            // This setup sends the captured audio to a virtual device
+            // In a real implementation, you would need to properly process the audio data
+            // and send it to the WebRTC audio track
+            captureThread = Thread {
+                val buffer = ByteBuffer.allocateDirect(bufferSize)
+
+                while (isCapturing.get() && audioRecord != null) {
+                    val readResult = audioRecord?.read(buffer, bufferSize)
+                    if (readResult != null && readResult > 0) {
+                        // In real implementation, send this audio data to the WebRTC library
+                        // or process it as needed
+                        buffer.clear()
+                    }
+                }
+            }
+
+            captureThread?.start()
+            Log.d(TAG, "Started capturing system audio")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting audio capture: ${e.message}")
+            stopCapture()
+        }
+    }
+
+    private fun stopCapture() {
+        isCapturing.set(false)
+
+        try {
+            captureThread?.join(1000)
+            captureThread = null
+
+            audioRecord?.let {
+                if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    it.stop()
+                }
+                it.release()
+                audioRecord = null
+            }
+
+            mediaProjection?.stop()
+            mediaProjection = null
+
+            Log.d(TAG, "Stopped capturing system audio")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping audio capture: ${e.message}")
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
+
+    override fun onDestroy() {
+        stopCapture()
+        super.onDestroy()
+    }
+}
+
+// MethodChannel implementation in MainActivity
+// Add this to your MainActivity.kt
+
+class MainActivity: FlutterActivity() {
+    private val CHANNEL = "com.example.audio_share/audio_capture"
+    private var mediaProjectionResultCode: Int = 0
+    private var mediaProjectionResultData: Intent? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startSystemAudioCapture" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        requestMediaProjection(result)
+                    } else {
+                        result.error("UNSUPPORTED_ANDROID_VERSION", "System audio capture requires Android 10 or higher", null)
+                    }
+                }
+                "stopSystemAudioCapture" -> {
+                    stopSystemAudioCapture()
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+    private fun requestMediaProjection(result: MethodChannel.Result) {
+        if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
+            startSystemAudioCapture()
+            result.success(null)
+            return
+        }
+
+        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        startActivityForResult(
+            mediaProjectionManager.createScreenCaptureIntent(),
+            REQUEST_MEDIA_PROJECTION
+        )
+
+        // Store the result to provide when the activity result is received
+        pendingResult = result
+    }
+
+    private var pendingResult: MethodChannel.Result? = null
+    private val REQUEST_MEDIA_PROJECTION = 13337
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQUEST_MEDIA_PROJECTION) {
+            if (resultCode == RESULT_OK && data != null) {
+                mediaProjectionResultCode = resultCode
+                mediaProjectionResultData = data
+
+                startSystemAudioCapture()
+                pendingResult?.success(null)
+            } else {
+                pendingResult?.error("PERMISSION_DENIED", "User denied screen capture permission", null)
+            }
+            pendingResult = null
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+    private fun startSystemAudioCapture() {
+        val serviceIntent = Intent(this, SystemAudioCaptureService::class.java).apply {
+            action = "START"
+            putExtra("resultCode", mediaProjectionResultCode)
+            putExtra("data", mediaProjectionResultData)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun stopSystemAudioCapture() {
+        val serviceIntent = Intent(this, SystemAudioCaptureService::class.java).apply {
+            action = "STOP"
+        }
+
+        startService(serviceIntent)
+    }
+}
+
+// ==================== ios/Runner/SystemAudioCapture.swift ====================
+import Flutter
+import UIKit
+import AVFoundation
+import ReplayKit
+
+@available(iOS 11.0, *)
+class SystemAudioCapturePlugin: NSObject, FlutterPlugin, RPScreenAudioSampleBufferDelegate {
+    private var recorder = RPScreenRecorder.shared()
+    private var isRecording = false
+    private var audioEngine: AVAudioEngine?
+    private var audioPlayerNode: AVAudioPlayerNode?
+
+    static func register(with registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(name: "com.example.audio_share/audio_capture", binaryMessenger: registrar.messenger())
+        let instance = SystemAudioCapturePlugin()
+        registrar.addMethodCallDelegate(instance, channel: channel)
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        switch call.method {
+        case "startSystemAudioCapture":
+            startCapture(result)
+        case "stopSystemAudioCapture":
+            stopCapture(result)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
+    private func startCapture(_ result: @escaping FlutterResult) {
+        guard !isRecording else {
+            result(FlutterError(code: "ALREADY_RUNNING", message: "Screen recording already in progress", details: nil))
+            return
+        }
+
+        // Set up audio session
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .allowBluetooth, .allowBluetoothA2DP])
+            try audioSession.setActive(true)
+        } catch {
+            result(FlutterError(code: "AUDIO_SESSION_ERROR", message: "Failed to set up audio session: \(error.localizedDescription)", details: nil))
+            return
+        }
+
+        // Set up AVAudioEngine for audio routing
+        audioEngine = AVAudioEngine()
+        audioPlayerNode = AVAudioPlayerNode()
+
+        guard let audioEngine = audioEngine, let audioPlayerNode = audioPlayerNode else {
+            result(FlutterError(code: "AUDIO_ENGINE_ERROR", message: "Failed to create audio engine", details: nil))
+            return
+        }
+
+        audioEngine.attach(audioPlayerNode)
+
+        let inputFormat = audioEngine.inputNode.inputFormat(forBus: 0)
+        audioEngine.connect(audioEngine.inputNode, to: audioEngine.mainMixerNode, format: inputFormat)
+
+        do {
+            try audioEngine.start()
+        } catch {
+            result(FlutterError(code: "AUDIO_ENGINE_ERROR", message: "Failed to start audio engine: \(error.localizedDescription)", details: nil))
+            return
+        }
+
+        // Start screen recording with audio
+        if recorder.isAvailable {
+            recorder.isMicrophoneEnabled = false
+
+            recorder.startCapture(handler: { (sampleBuffer, bufferType, error) in
+                if let error = error {
+                    print("Error during screen recording: \(error.localizedDescription)")
+                    return
+                }
+
+                // We only want audio
+                if bufferType == .audioApp {
+                    // In a real implementation, you would process the audio sample buffer here
+                    // and route it to the WebRTC audio track
+                }
+
+            }, completionHandler: { (error) in
+                if let error = error {
+                    result(FlutterError(code: "CAPTURE_ERROR", message: "Failed to start screen recording: \(error.localizedDescription)", details: nil))
+                    return
+                }
+
+                self.isRecording = true
+                result(nil)
+            })
+        } else {
+            result(FlutterError(code: "UNAVAILABLE", message: "Screen recording is not available on this device", details: nil))
+        }
+    }
+
+    private func stopCapture(_ result: @escaping FlutterResult) {
+        guard isRecording else {
+            result(nil)
+            return
+        }
+
+        recorder.stopCapture { error in
+            if let error = error {
+                result(FlutterError(code: "STOP_ERROR", message: "Failed to stop screen recording: \(error.localizedDescription)", details: nil))
+                return
+            }
+
+            // Stop the audio engine
+            self.audioEngine?.stop()
+            self.audioPlayerNode?.stop()
+            self.audioEngine = nil
+            self.audioPlayerNode = nil
+
+            // Deactivate audio session
+            do {
+                try AVAudioSession.sharedInstance().setActive(false)
+            } catch {
+                print("Failed to deactivate audio session: \(error.localizedDescription)")
+            }
+
+            self.isRecording = false
+            result(nil)
+        }
+    }
+
+    // RPScreenAudioSampleBufferDelegate methods
+    func screenRecorder(_ screenRecorder: RPScreenRecorder, didStopRecordingWith error: Error, fileOutput: URL?) {
+        isRecording = false
+    }
+}
+
+// Add this to AppDelegate.swift
+@available(iOS 11.0, *)
+class AppDelegate: FlutterAppDelegate {
+    override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        GeneratedPluginRegistrant.register(with: self)
+        SystemAudioCapturePlugin.register(with: self.registrar(forPlugin: "SystemAudioCapturePlugin")!)
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+}

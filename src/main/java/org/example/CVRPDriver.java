@@ -21,22 +21,27 @@ public class CVRPDriver {
         try {
             System.out.println("Loading data...");
 
-            validateFilePath("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\location.txt");
-            validateFilePath("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\vehicles.txt");
-            validateFilePath("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\weather_conditions.txt");
-            validateFilePath("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\road_events.txt");
-            validateFilePath("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\traffic_congestions.txt");
+            validateFilePath("src/main/java/org/example/resource/location.txt");
+            validateFilePath("src\\main\\java\\org\\example\\resource\\vehicles.txt");
+            validateFilePath("src\\main\\java\\org\\example\\resource\\weather_conditions.txt");
+            validateFilePath("src\\main\\java\\org\\example\\resource\\road_events.txt");
+            validateFilePath("src\\main\\java\\org\\example\\resource\\traffic_congestions.txt");
 
-            List<Location> locations = loadLocations("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\location.txt");
-            List<Vehicle> vehicles = loadVehicles("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\vehicles.txt");
-            weatherConditions = loadWeatherConditions("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\weather_conditions.txt");
-            roadEvents = loadRoadEvents("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\road_events.txt");
-            trafficCongestions = loadTrafficCongestions("C:\\Users\\moata\\IdeaProjects\\cvrp\\src\\main\\java\\org\\example\\resource\\traffic_congestions.txt");
+            List<Location> locations = loadLocations("src\\main\\java\\org\\example\\resource\\location.txt");
+            List<Vehicle> vehicles = loadVehicles("src\\main\\java\\org\\example\\resource\\vehicles.txt");
+            weatherConditions = loadWeatherConditions("src\\main\\java\\org\\example\\resource\\weather_conditions.txt");
+            roadEvents = loadRoadEvents("src\\main\\java\\org\\example\\resource\\road_events.txt");
+            trafficCongestions = loadTrafficCongestions("src\\main\\java\\org\\example\\resource\\traffic_congestions.txt");
 
             System.out.println("Data loaded successfully in " + (System.currentTimeMillis() - startTime) + "ms");
             printInputSummary(locations, vehicles, weatherConditions, roadEvents, trafficCongestions);
 
+            double crossoverRate = 0.5;
+            double mutationRate = 0.3;
+
             System.out.println("\n==== Running CVRP Hybrid Algorithm with Enhanced Timeout Protection ====\n");
+            System.out.println("Crossover Rate: " + crossoverRate);
+            System.out.println("Mutation Rate: " + mutationRate);
 
             final int TIMEOUT_SECONDS = 180;
             ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -44,7 +49,7 @@ public class CVRPDriver {
 
             final CVRPHybridAlgorithm algorithm = new CVRPHybridAlgorithm(
                     vehicles, locations, weatherConditions, roadEvents, trafficCongestions,
-                    TIMEOUT_SECONDS * 1000);
+                    TIMEOUT_SECONDS * 1000, crossoverRate, mutationRate);
 
             Thread watchdog = new Thread(() -> {
                 try {

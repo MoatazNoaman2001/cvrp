@@ -16,6 +16,10 @@ public class CVRPHybridAlgorithm {
     private final int maxIterations;
     private final int noImprovementThreshold;
 
+    // Genetic algorithm parameters
+    private final double crossoverRate;
+    private final double mutationRate;
+
     // Add early termination flag and timeout parameters
     private volatile boolean terminateEarly = false;
     private final long maxExecutionTimeMs;
@@ -28,10 +32,13 @@ public class CVRPHybridAlgorithm {
     private final List<RoadEvent> roadEvents;
     private final List<TrafficCongestion> trafficCongestions;
 
-    // Tabu Search parameters
-    private final int tabuSize = 10; // Size of tabu list
-    private final List<List<Integer>> tabuList = new ArrayList<>(); // Tabu list of recent moves
+    // Helper classes for search algorithms
+    private final TabuSearch tabuSearch;
+    private final ThreeOptLocalSearch threeOptLocalSearch;
 
+    /**
+     * Constructor with default genetic algorithm parameters
+     */
     public CVRPHybridAlgorithm(
             List<Vehicle> vehicles,
             List<Location> locations,
@@ -39,6 +46,22 @@ public class CVRPHybridAlgorithm {
             List<RoadEvent> roadEvents,
             List<TrafficCongestion> trafficCongestions,
             long maxExecutionTimeMs) {
+        this(vehicles, locations, weatherConditions, roadEvents, trafficCongestions,
+                maxExecutionTimeMs, 0.8, 0.2);
+    }
+
+    /**
+     * Constructor with customizable genetic algorithm parameters
+     */
+    public CVRPHybridAlgorithm(
+            List<Vehicle> vehicles,
+            List<Location> locations,
+            List<WeatherCondition> weatherConditions,
+            List<RoadEvent> roadEvents,
+            List<TrafficCongestion> trafficCongestions,
+            long maxExecutionTimeMs,
+            double crossoverRate,
+            double mutationRate) {
 
         this.vehicles = vehicles;
         this.locations = locations;
@@ -46,6 +69,8 @@ public class CVRPHybridAlgorithm {
         this.roadEvents = roadEvents;
         this.trafficCongestions = trafficCongestions;
         this.maxExecutionTimeMs = maxExecutionTimeMs;
+        this.crossoverRate = crossoverRate;
+        this.mutationRate = mutationRate;
 
         this.refuelingStations = locations.stream()
                 .filter(loc -> loc.getType().equalsIgnoreCase("refueling_station"))
@@ -56,12 +81,24 @@ public class CVRPHybridAlgorithm {
         this.maxIterations = 100;
         this.noImprovementThreshold = 30;
 
+        // Initialize tabu search with tabu size 10 and 20 iterations
+        this.tabuSearch = new TabuSearch(
+                weatherConditions, roadEvents, trafficCongestions,
+                refuelingStations, 50, 20);
+
+        // Initialize 3-opt local search
+        this.threeOptLocalSearch = new ThreeOptLocalSearch(
+                weatherConditions, roadEvents, trafficCongestions, refuelingStations);
+
         System.out.println("CVRP Hybrid Algorithm Configuration:");
         System.out.println("- Population Size: " + populationSize);
         System.out.println("- Max Iterations: " + maxIterations);
         System.out.println("- No Improvement Threshold: " + noImprovementThreshold);
+        System.out.println("- Crossover Rate: " + crossoverRate);
+        System.out.println("- Mutation Rate: " + mutationRate);
         System.out.println("- Max Execution Time: " + maxExecutionTimeMs + "ms");
         System.out.println("- Refueling Stations: " + refuelingStations.size());
+        System.out.println("- TabuSize: " + tabuSearch.getTabuSize());
     }
 
     /**
@@ -119,18 +156,28 @@ public class CVRPHybridAlgorithm {
                 // Perturbation (line 9)
                 List<Route> perturbedRoute = perturbIndividual(betterRoute);
 
-                // Apply mutation - Reverse swap (line 10)
-                List<Route> mutatedRoute = applyReverseSwapMutation(perturbedRoute);
+                // Apply mutation with probability - Reverse swap (line 10)
+                List<Route> mutatedRoute;
+                if (Math.random() < mutationRate) {
+                    mutatedRoute = applyReverseSwapMutation(perturbedRoute);
+                } else {
+                    mutatedRoute = perturbedRoute;
+                }
 
-                // Apply crossover - Single point (line 11)
-                List<Route> crossedRoute = applySinglePointCrossover(mutatedRoute,
-                        selectRandomIndividual(population, i));
+                // Apply crossover with probability - Single point (line 11)
+                List<Route> crossedRoute;
+                if (Math.random() < crossoverRate) {
+                    crossedRoute = applySinglePointCrossover(mutatedRoute,
+                            selectRandomIndividual(population, i));
+                } else {
+                    crossedRoute = mutatedRoute;
+                }
 
                 // Apply selection (line 12)
                 List<Route> selectedRoute = applySelection(crossedRoute);
 
                 // Apply Tabu Search (line 13)
-                List<Route> tabuOptimizedRoute = applyTabuSearch(selectedRoute);
+                List<Route> tabuOptimizedRoute = tabuSearch.applyTabuSearch(selectedRoute);
 
                 // Sort routes by fitness (line 14)
                 double currentFitness = calculateFitness(tabuOptimizedRoute);
@@ -150,7 +197,7 @@ public class CVRPHybridAlgorithm {
             double currentBestFitness = calculateFitness(currentBestRoute);
 
             // Apply 3-opt local search to best route (lines 22-23)
-            List<Route> localSearchRoute = apply3OptLocalSearch(currentBestRoute);
+            List<Route> localSearchRoute = threeOptLocalSearch.apply3OptLocalSearch(currentBestRoute);
             double localSearchFitness = calculateFitness(localSearchRoute);
 
             // Update best solution if improvement found (lines 24-28)
@@ -370,6 +417,9 @@ public class CVRPHybridAlgorithm {
         return new ArrayList<>(population.get(index));
     }
 
+    /**
+     * Perturb individual by swapping random customers between routes
+     */
     /**
      * Perturb individual by swapping random customers between routes
      */
@@ -604,277 +654,6 @@ public class CVRPHybridAlgorithm {
         // In this simple implementation, we just return the individual
         // Could be expanded to compare with other individuals
         return individual;
-    }
-
-    /**
-     * Apply tabu search to improve the solution
-     */
-    private List<Route> applyTabuSearch(List<Route> individual) {
-        List<Route> current = deepCopy(individual);
-        List<Route> bestSolution = deepCopy(individual);
-        double bestFitness = calculateFitness(bestSolution);
-
-        // Clear tabu list if it gets too large
-        while (tabuList.size() > tabuSize) {
-            tabuList.remove(0);
-        }
-
-        // Perform a few iterations of tabu search
-        int iterations = 20;
-
-        for (int i = 0; i < iterations; i++) {
-            List<List<Route>> neighbors = generateTabuNeighbors(current);
-            boolean foundImprovement = false;
-
-            for (List<Route> neighbor : neighbors) {
-                // Skip if the move is in the tabu list
-                if (isTabu(neighbor)) {
-                    continue;
-                }
-
-                double neighborFitness = calculateFitness(neighbor);
-
-                if (neighborFitness < bestFitness) {
-                    bestSolution = neighbor;
-                    bestFitness = neighborFitness;
-                    current = neighbor;
-                    foundImprovement = true;
-
-                    // Add the move to the tabu list
-                    addToTabuList(neighbor);
-                    break;
-                }
-            }
-
-            if (!foundImprovement) {
-                break;
-            }
-        }
-
-        return bestSolution;
-    }
-
-    /**
-     * Generate neighbors for tabu search by swapping customers between routes
-     */
-    private List<List<Route>> generateTabuNeighbors(List<Route> solution) {
-        List<List<Route>> neighbors = new ArrayList<>();
-
-        if (solution.size() < 2) {
-            return neighbors;
-        }
-
-        for (int i = 0; i < solution.size(); i++) {
-            for (int j = i + 1; j < solution.size(); j++) {
-                Route route1 = solution.get(i);
-                Route route2 = solution.get(j);
-
-                List<Location> customers1 = getCustomers(route1.getLocations());
-                List<Location> customers2 = getCustomers(route2.getLocations());
-
-                if (customers1.isEmpty() || customers2.isEmpty()) {
-                    continue;
-                }
-
-                // Try swapping each pair of customers
-                for (Location customer1 : customers1) {
-                    for (Location customer2 : customers2) {
-                        Vehicle vehicle1 = route1.getVehicle();
-                        Vehicle vehicle2 = route2.getVehicle();
-
-                        double demand1 = route1.getTotalDemand() - customer1.getDemand() + customer2.getDemand();
-                        double demand2 = route2.getTotalDemand() - customer2.getDemand() + customer1.getDemand();
-
-                        if (demand1 <= vehicle1.getPayloadCapacity() && demand2 <= vehicle2.getPayloadCapacity()) {
-                            // Create a new neighbor by swapping
-                            List<Route> neighbor = deepCopy(solution);
-                            Route newRoute1 = neighbor.get(i);
-                            Route newRoute2 = neighbor.get(j);
-
-                            List<Location> locations1 = new ArrayList<>(newRoute1.getLocations());
-                            List<Location> locations2 = new ArrayList<>(newRoute2.getLocations());
-
-                            int pos1 = locations1.indexOf(customer1);
-                            int pos2 = locations2.indexOf(customer2);
-
-                            locations1.set(pos1, customer2);
-                            locations2.set(pos2, customer1);
-
-                            newRoute1.setLocations(locations1);
-                            newRoute2.setLocations(locations2);
-
-                            neighbors.add(neighbor);
-                        }
-                    }
-                }
-            }
-        }
-
-        return neighbors;
-    }
-
-    /**
-     * Check if a move is in the tabu list
-     */
-    private boolean isTabu(List<Route> solution) {
-        List<Integer> routeSizes = solution.stream()
-                .map(route -> route.getLocations().size())
-                .collect(Collectors.toList());
-
-        for (List<Integer> tabuMove : tabuList) {
-            if (routeSizes.equals(tabuMove)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Add a move to the tabu list
-     */
-    private void addToTabuList(List<Route> solution) {
-        List<Integer> routeSizes = solution.stream()
-                .map(route -> route.getLocations().size())
-                .collect(Collectors.toList());
-
-        tabuList.add(routeSizes);
-
-        if (tabuList.size() > tabuSize) {
-            tabuList.remove(0); // Remove oldest entry
-        }
-    }
-
-    /**
-     * Apply 3-opt local search to improve the route
-     */
-    private List<Route> apply3OptLocalSearch(List<Route> solution) {
-        List<Route> improved = deepCopy(solution);
-
-        for (int routeIndex = 0; routeIndex < improved.size(); routeIndex++) {
-            Route route = improved.get(routeIndex);
-            List<Location> locations = route.getLocations();
-
-            // We only need to optimize routes with at least 5 locations
-            // (depot + 3 customers + depot)
-            if (locations.size() < 5) {
-                continue;
-            }
-
-            // Apply 3-opt to this route
-            List<Location> optimizedLocations = apply3OptToRoute(locations);
-            route.setLocations(optimizedLocations);
-        }
-
-        return improved;
-    }
-
-    /**
-     * Apply 3-opt local search to a single route
-     */
-    private List<Location> apply3OptToRoute(List<Location> route) {
-        List<Location> bestRoute = new ArrayList<>(route);
-        double bestDistance = calculateRouteDistance(bestRoute);
-        boolean improved = true;
-
-        while (improved) {
-            improved = false;
-
-            // Consider all possible 3-opt moves
-            for (int i = 1; i < route.size() - 3; i++) {
-                for (int j = i + 1; j < route.size() - 2; j++) {
-                    for (int k = j + 1; k < route.size() - 1; k++) {
-                        // Generate all possible 3-opt configurations
-                        List<List<Location>> candidates = generate3OptCandidates(bestRoute, i, j, k);
-
-                        for (List<Location> candidate : candidates) {
-                            double distance = calculateRouteDistance(candidate);
-
-                            if (distance < bestDistance) {
-                                bestRoute = candidate;
-                                bestDistance = distance;
-                                improved = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return bestRoute;
-    }
-
-    /**
-     * Generate all possible 3-opt candidates by breaking and reconnecting segments
-     */
-    private List<List<Location>> generate3OptCandidates(List<Location> route, int i, int j, int k) {
-        List<List<Location>> candidates = new ArrayList<>();
-
-        // Break the route into 4 segments
-        List<Location> segment1 = new ArrayList<>(route.subList(0, i));
-        List<Location> segment2 = new ArrayList<>(route.subList(i, j));
-        List<Location> segment3 = new ArrayList<>(route.subList(j, k));
-        List<Location> segment4 = new ArrayList<>(route.subList(k, route.size()));
-
-        // Create possible reconnections
-        // Original: 1-2-3-4
-        candidates.add(new ArrayList<>(route)); // Keep original
-
-        // 1-3-2-4
-        List<Location> candidate1 = new ArrayList<>();
-        candidate1.addAll(segment1);
-        candidate1.addAll(segment3);
-        candidate1.addAll(segment2);
-        candidate1.addAll(segment4);
-        candidates.add(candidate1);
-
-        // 1-3-2R-4
-        List<Location> candidate2 = new ArrayList<>();
-        candidate2.addAll(segment1);
-        candidate2.addAll(segment3);
-        List<Location> segment2R = new ArrayList<>(segment2);
-        Collections.reverse(segment2R);
-        candidate2.addAll(segment2R);
-        candidate2.addAll(segment4);
-        candidates.add(candidate2);
-
-        // 1-2R-3-4
-        List<Location> candidate3 = new ArrayList<>();
-        candidate3.addAll(segment1);
-        candidate3.addAll(segment2R);
-        candidate3.addAll(segment3);
-        candidate3.addAll(segment4);
-        candidates.add(candidate3);
-
-        // 1-2-3R-4
-        List<Location> candidate4 = new ArrayList<>();
-        candidate4.addAll(segment1);
-        candidate4.addAll(segment2);
-        List<Location> segment3R = new ArrayList<>(segment3);
-        Collections.reverse(segment3R);
-        candidate4.addAll(segment3R);
-        candidate4.addAll(segment4);
-        candidates.add(candidate4);
-
-        return candidates;
-    }
-
-    /**
-     * Calculate distance of a route
-     */
-    private double calculateRouteDistance(List<Location> route) {
-        double distance = 0;
-
-        for (int i = 0; i < route.size() - 1; i++) {
-            Location current = route.get(i);
-            Location next = route.get(i + 1);
-
-            double dx = current.getX() - next.getX();
-            double dy = current.getY() - next.getY();
-            distance += Math.sqrt(dx * dx + dy * dy);
-        }
-
-        return distance;
     }
 
     /**

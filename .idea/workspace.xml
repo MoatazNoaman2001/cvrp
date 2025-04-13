@@ -4,32 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6ef14d55-314c-45fc-88fb-db19d1408408" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/uiDesigner.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/CVRPDriver.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/CVRPHybridAlgorithm.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/IoTIntegration.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/MapVisualization.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/Route.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/Location.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/Order.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/Product.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/RoadEvent.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/TrafficCongestion.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/Vehicle.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/models/WeatherCondition.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/fl.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/location.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/road_events.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/traffic_congestions.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/vehicles.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/resource/weather_conditions.txt" afterDir="false" />
+    <list default="true" id="6ef14d55-314c-45fc-88fb-db19d1408408" name="Changes" comment="version 1 beta">
+      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/TabuSearch.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/ThreeOptLocalSearch.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/ui/InputInterface.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/ui/OutputInterface.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/example/CVRPDriver.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/CVRPDriver.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/example/CVRPHybridAlgorithm.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/CVRPHybridAlgorithm.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -55,26 +37,30 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Application.CVRPDriver.executor&quot;: &quot;Run&quot;,
-    &quot;Application.InputInterface.executor&quot;: &quot;Run&quot;,
-    &quot;Application.OutputInterface.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;onboarding.tips.debug.path&quot;: &quot;C:/Users/moata/IdeaProjects/cvrp/src/main/java/org/example/Main.java&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Application.CVRPDriver.executor": "Run",
+    "Application.InputInterface.executor": "Run",
+    "Application.OutputInterface.executor": "Run",
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/Users/moata/IdeaProjects/cvrp/src/main/java/org/example",
+    "onboarding.tips.debug.path": "C:/Users/moata/IdeaProjects/cvrp/src/main/java/org/example/Main.java"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\moata\IdeaProjects\cvrp\src\main\java\org\example" />
+    </key>
     <key name="CopyClassDialog.RECENTS_KEY">
       <recent name="org.example.model" />
     </key>
   </component>
-  <component name="RunManager" selected="Application.CVRPDriver">
+  <component name="RunManager" selected="Application.OutputInterface">
     <configuration name="CVRPDriver" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="org.example.CVRPDriver" />
       <module name="cvrp" />
@@ -116,8 +102,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Application.CVRPDriver" />
         <item itemvalue="Application.OutputInterface" />
+        <item itemvalue="Application.CVRPDriver" />
         <item itemvalue="Application.InputInterface" />
       </list>
     </recent_temporary>
@@ -131,6 +117,19 @@
       <option name="presentableId" value="Default" />
       <updated>1743037378484</updated>
     </task>
+    <task id="LOCAL-00001" summary="version 1 beta">
+      <option name="closed" value="true" />
+      <created>1743173065256</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1743173065256</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="version 1 beta" />
+    <option name="LAST_COMMIT_MESSAGE" value="version 1 beta" />
   </component>
 </project>
